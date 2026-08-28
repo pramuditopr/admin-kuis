@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dashboard Nilai Admin</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+  .bg-hero-gradient {
+    background: linear-gradient(135deg, #6d28d9 0%, #8b5cf6 45%, #a78bfa 100%);
+  }
+  .fade-in { animation: fadeIn .4s ease-in-out; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+</head>
+<body class="bg-neutral-100 min-h-screen text-neutral-800">
+
+  <!-- ========================= HEADER ========================= -->
+  <header class="bg-hero-gradient text-white">
+    <div class="max-w-6xl mx-auto px-6 py-10">
+      <h1 class="text-2xl md:text-3xl font-bold tracking-tight">Dashboard Nilai Admin - Bilangan Bulat</h1>
+      <p class="mt-2 text-purple-100 text-sm md:text-base">Pantau hasil kuis peserta secara real-time, dan beri izin peserta untuk mulai mengerjakan.</p>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 -mt-8 pb-16">
+
+    <!-- ========================= STAT CARDS ========================= -->
+    <section class="grid sm:grid-cols-3 gap-4 mb-6 fade-in">
+      <div class="bg-white rounded-2xl shadow-xl border border-neutral-200 p-6 flex items-center gap-4">
+        <div class="w-12 h-12 rounded-xl bg-purple-100 flex items-center justify-center text-2xl">👥</div>
+        <div>
+          <p class="text-sm text-neutral-500">Total Peserta</p>
+          <p id="stat-total" class="text-2xl font-bold text-neutral-800">0</p>
+        </div>
+      </div>
+      <div class="bg-white rounded-2xl shadow-xl border border-neutral-200 p-6 flex items-center gap-4">
+        <div class="w-12 h-12 rounded-xl bg-yellow-100 flex items-center justify-center text-2xl">⏳</div>
+        <div>
+          <p class="text-sm text-neutral-500">Menunggu Izin</p>
+          <p id="stat-pending" class="text-2xl font-bold text-neutral-800">0</p>
+        </div>
+      </div>
+      <div class="bg-white rounded-2xl shadow-xl border border-neutral-200 p-6 flex items-center gap-4">
+        <div class="w-12 h-12 rounded-xl bg-violet-100 flex items-center justify-center text-2xl">📊</div>
+        <div>
+          <p class="text-sm text-neutral-500">Rata-rata Nilai (Selesai)</p>
+          <p id="stat-avg" class="text-2xl font-bold text-neutral-800">0</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================= TABEL ========================= -->
+    <section class="bg-white rounded-2xl shadow-xl border border-neutral-200 p-6 md:p-8 fade-in">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+        <h2 class="text-lg font-semibold text-neutral-800">Data Peserta Kuis (Real-Time)</h2>
+        <input
+          id="search-input"
+          type="text"
+          placeholder="Cari berdasarkan Nama atau Kelas..."
+          class="w-full sm:w-72 rounded-lg border border-neutral-300 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+        />
+      </div>
+
+      <div class="overflow-x-auto rounded-xl border border-neutral-200">
+        <table class="min-w-full text-sm">
+          <thead class="bg-neutral-50 text-neutral-500 uppercase text-xs">
+            <tr>
+              <th class="px-4 py-3 text-left">Waktu Daftar</th>
+              <th class="px-4 py-3 text-left">Nama User</th>
+              <th class="px-4 py-3 text-left">Kelas / Departemen</th>
+              <th class="px-4 py-3 text-left">Email</th>
+              <th class="px-4 py-3 text-left">Status</th>
+              <th class="px-4 py-3 text-left">Skor Akhir</th>
+              <th class="px-4 py-3 text-left">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="table-body" class="divide-y divide-neutral-200">
+            <tr>
+              <td colspan="7" class="px-4 py-6 text-center text-neutral-400">Memuat data...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- ========================= FIREBASE (MODULAR v10) ========================= -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import {
+      getFirestore,
+      collection,
+      doc,
+      updateDoc,
+      onSnapshot,
+      query,
+      orderBy,
+      serverTimestamp
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    // ============================================================
+    // 🔧 UBAH DI SINI: Konfigurasi Firebase kamu
+    // HARUS SAMA PERSIS dengan konfigurasi di halaman user (proyek Firebase yang sama)
+    // Ambil dari: Firebase Console > Project Settings > General > "Your apps" > SDK setup and configuration
+    // ============================================================
+    const firebaseConfig = {
+    apiKey: "AIzaSyDJENdjNPj4b9G2nzl1X-C12iTv_oZpTl4",
+    authDomain: "kuis-mtk-app.firebaseapp.com",
+    projectId: "kuis-mtk-app",
+    storageBucket: "kuis-mtk-app.firebasestorage.app",
+    messagingSenderId: "546398118889",
+    appId: "1:546398118889:web:4185b0dbb1fdb46b2ca178"
+  };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // Nama koleksi Firestore yang dipakai bersama dengan halaman user
+    const KOLEKSI = "peserta";
+
+    // ============================================================
+    // State lokal: menyimpan seluruh data dari Firestore untuk difilter di search bar
+    // ============================================================
+    let allData = [];
+
+    const tableBody = document.getElementById("table-body");
+    const statTotal = document.getElementById("stat-total");
+    const statPending = document.getElementById("stat-pending");
+    const statAvg = document.getElementById("stat-avg");
+    const searchInput = document.getElementById("search-input");
+
+    // Badge warna berdasarkan skor
+    function getBadge(skor) {
+      if (skor >= 80) return `<span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">${skor}</span>`;
+      if (skor >= 60) return `<span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700">${skor}</span>`;
+      return `<span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700">${skor}</span>`;
+    }
+
+    // Badge status peserta: menunggu izin / sedang mengerjakan / selesai
+    function getStatusBadge(status, percobaan) {
+      if (status === "selesai") {
+        const label = percobaan >= 2 ? "Selesai (Percobaan 2)" : "Selesai";
+        return `<span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">${label}</span>`;
+      }
+      if (status === "diizinkan" || status === "mengerjakan") {
+        const label = percobaan >= 2 ? "Mengerjakan (Percobaan 2)" : "Sedang Mengerjakan";
+        return `<span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">${label}</span>`;
+      }
+      return `<span class="px-2.5 py-1 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-700">Menunggu Izin</span>`;
+    }
+
+    function formatWaktu(timestamp) {
+      if (!timestamp || !timestamp.toDate) return "-";
+      const d = timestamp.toDate();
+      return d.toLocaleString("id-ID", {
+        day: "2-digit", month: "short", year: "numeric",
+        hour: "2-digit", minute: "2-digit"
+      });
+    }
+
+    // Render tabel berdasarkan data yang sudah difilter
+    function renderTable(data) {
+      if (data.length === 0) {
+        tableBody.innerHTML = `<tr><td colspan="7" class="px-4 py-6 text-center text-neutral-400">Belum ada data.</td></tr>`;
+        return;
+      }
+      tableBody.innerHTML = data.map(item => {
+        const aksi = item.status === "menunggu_izin"
+          ? `<button data-id="${item.id}" class="btn-izin bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition">✅ Izinkan</button>`
+          : `<span class="text-neutral-300 text-xs">-</span>`;
+
+        return `
+        <tr class="hover:bg-neutral-50 transition">
+          <td class="px-4 py-3 whitespace-nowrap text-neutral-500">${formatWaktu(item.waktu_daftar)}</td>
+          <td class="px-4 py-3 font-medium text-neutral-800">${item.nama || "-"}</td>
+          <td class="px-4 py-3">${item.kelas || "-"}</td>
+          <td class="px-4 py-3 text-neutral-500">${item.email || "-"}</td>
+          <td class="px-4 py-3">${getStatusBadge(item.status, item.percobaan || 1)}</td>
+          <td class="px-4 py-3">${item.status === "selesai" ? getBadge(item.skor ?? 0) : `<span class="text-neutral-300 text-xs">-</span>`}</td>
+          <td class="px-4 py-3">${aksi}</td>
+        </tr>
+      `;
+      }).join("");
+    }
+
+    // Update kartu statistik
+    function updateStats(data) {
+      statTotal.textContent = data.length;
+      statPending.textContent = data.filter(item => item.status === "menunggu_izin").length;
+
+      const selesai = data.filter(item => item.status === "selesai");
+      if (selesai.length === 0) {
+        statAvg.textContent = "0";
+        return;
+      }
+      const totalSkor = selesai.reduce((sum, item) => sum + (item.skor || 0), 0);
+      statAvg.textContent = Math.round(totalSkor / selesai.length);
+    }
+
+    // Filter data berdasarkan input search (nama atau kelas)
+    function applyFilter() {
+      const keyword = searchInput.value.trim().toLowerCase();
+      const filtered = allData.filter(item =>
+        (item.nama || "").toLowerCase().includes(keyword) ||
+        (item.kelas || "").toLowerCase().includes(keyword)
+      );
+      renderTable(filtered);
+    }
+
+    searchInput.addEventListener("input", applyFilter);
+
+    // Klik tombol "Izinkan" -> ubah status dokumen peserta menjadi "diizinkan"
+    // Halaman user yang sedang mendengarkan dokumen ini akan otomatis pindah ke halaman soal.
+    tableBody.addEventListener("click", async (e) => {
+      const btn = e.target.closest(".btn-izin");
+      if (!btn) return;
+      const id = btn.dataset.id;
+      btn.disabled = true;
+      btn.textContent = "Memproses...";
+      try {
+        await updateDoc(doc(db, KOLEKSI, id), {
+          status: "diizinkan",
+          waktu_izin: serverTimestamp()
+        });
+      } catch (err) {
+        console.error("Gagal memberikan izin:", err);
+        alert("Gagal memberikan izin. Coba lagi.");
+        btn.disabled = false;
+        btn.textContent = "✅ Izinkan";
+      }
+    });
+
+    // ============================================================
+    // Real-time listener ke koleksi "peserta", diurutkan dari yang terbaru daftar
+    // ============================================================
+    const q = query(collection(db, KOLEKSI), orderBy("waktu_daftar", "desc"));
+
+    onSnapshot(q, (snapshot) => {
+      allData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      updateStats(allData);
+      applyFilter();
+    }, (error) => {
+      console.error("Gagal mengambil data Firestore:", error);
+      tableBody.innerHTML = `<tr><td colspan="7" class="px-4 py-6 text-center text-red-500">⚠️ Gagal memuat data. Periksa konfigurasi Firebase.</td></tr>`;
+    });
+  </script>
+</body>
+</html>
